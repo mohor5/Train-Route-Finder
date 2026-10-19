@@ -8,6 +8,11 @@ client = TestClient(app)
 
 
 class TestApi(unittest.TestCase):
+    def test_home_page_is_served(self):
+        response = client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Train Route Finder", response.text)
+
     def test_stations(self):
         response = client.get("/stations")
         self.assertEqual(response.status_code, 200)

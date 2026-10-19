@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Train Route Finder</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; background: #f4f6f8; color: #1f2933;
+           margin: 0; padding: 24px; }
+    main { max-width: 640px; margin: 0 auto; background: #fff; padding: 24px;
+           border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+    h1 { margin-top: 0; font-size: 1.5rem; }
+    label { display: block; margin: 14px 0 4px; font-weight: 600; }
+    select, button { font-size: 1rem; padding: 8px; width: 100%; box-sizing: border-box; }
+    .modes { display: flex; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
+    .modes label { font-weight: 400; margin: 0; display: flex; gap: 6px; align-items: center; }
+    button { margin-top: 18px; background: #1f6feb; color: #fff; border: 0;
+             border-radius: 8px; cursor: pointer; }
+    button:hover { background: #1a5fcc; }
+    #result { margin-top: 20px; }
+    .path { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .stop { background: #e7f0ff; padding: 4px 10px; border-radius: 999px; }
+    .arrow { color: #7b8794; }
+    .summary { margin-top: 12px; font-weight: 600; }
+    .error { color: #b42318; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Train Route Finder</h1>
+
+    <label for="src">From</label>
+    <select id="src"></select>
+
+    <label for="dst">To</label>
+    <select id="dst"></select>
+
+    <div class="modes">
+      <label><input type="radio" name="mode" value="minutes" checked> Fastest</label>
+      <label><input type="radio" name="mode" value="cost"> Cheapest</label>
+      <label><input type="radio" name="mode" value="stops"> Fewest stops</label>
+    </div>
+
+    <button id="find">Find route</button>
+    <div id="result" aria-live="polite"></div>
+  </main>
+
+  <script>
+    const src = document.getElementById("src");
+    const dst = document.getElementById("dst");
+    const result = document.getElementById("result");
+
+    function fillSelect(select, stations) {
+      for (const name of stations) {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        select.appendChild(option);
+      }
+    }
+
+    async function loadStations() {
+      try {
+        const response = await fetch("/stations");
+        const data = await response.json();
+        fillSelect(src, data.stations);
+        fillSelect(dst, data.stations);
+        if (data.stations.length > 1) dst.selectedIndex = 1;
+      } catch (error) {
+        showError("Could not load stations. Is the server running?");
+      }
+    }
+
+    function showError(message) {
+      result.replaceChildren();
+      const p = document.createElement("p");
+      p.className = "error";
+      p.textContent = message;
+      result.appendChild(p);
+    }
+
+    function showRoute(path, summaryText) {
+      result.replaceChildren();
+      const pathBox = document.createElement("div");
+      pathBox.className = "path";
+      path.forEach((station, i) => {
+        if (i > 0) {
+          const arrow = document.createElement("span");
+          arrow.className = "arrow";
+          arrow.textContent = "\u2192";
+          pathBox.appendChild(arrow);
+        }
+        const chip = document.createElement("span");
+        chip.className = "stop";
+        chip.textContent = station;
+        pathBox.appendChild(chip);
+      });
+      const summary = document.createElement("div");
+      summary.className = "summary";
+      summary.textContent = summaryText;
+      result.append(pathBox, summary);
+    }
+
+    async function findRoute() {
+      const mode = document.querySelector("input[name=mode]:checked").value;
+      const params = new URLSearchParams({ src: src.value, dst: dst.value });
+      let url;
+      if (mode === "stops") {
+        url = "/stops?" + params;
+      } else {
+        params.set("metric", mode);
+        url = "/route?" + params;
+      }
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!response.ok) {
+          showError(data.detail || "Something went wrong.");
+          return;
+        }
+        if (mode === "stops") {
+          showRoute(data.path, data.stops + " stop(s)");
+        } else if (mode === "minutes") {
+          showRoute(data.path, "Total: " + data.total + " minutes");
+        } else {
+          showRoute(data.path, "Total: " + data.total + " rupees");
+        }
+      } catch (error) {
+        showError("Could not reach the server.");
+      }
+    }
+
+    document.getElementById("find").addEventListener("click", findRoute);
+    loadStations();
+  </script>
+</body>
+</html>
